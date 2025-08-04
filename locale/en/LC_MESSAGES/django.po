@@ -1,0 +1,37 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-08-04 21:27+0300\n"
+"PO-Revision-Date: 2025-08-04 21:27+0300\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Invalid credentials"
+msgstr "Invalid credentials"
+
+msgid "Email already exists"
+msgstr "Email already exists"
+
+msgid "Invalid street ID"
+msgstr "Invalid street ID"
+
+msgid "No account found with this email address"
+msgstr "No account found with this email address"
+
+msgid "Failed to send email. Please try again later."
+msgstr "Failed to send email. Please try again later."
+
+msgid "Password reset link sent to your email"
+msgstr "Password reset link sent to your email"
+
+msgid "Invalid or expired token"
+msgstr "Invalid or expired token"
+
+msgid "Password reset successfully"
+msgstr "Password reset successfully"
