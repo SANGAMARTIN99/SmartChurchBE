@@ -5,10 +5,11 @@ from .models import Member
 class MemberType(DjangoObjectType):
     class Meta:
         model = Member
-        fields = ('id', 'full_name', 'email')
+        fields = ('id', 'full_name', 'email', 'role')
 
 class LoginOutput(graphene.ObjectType):
-    token = graphene.String()
+    access_token = graphene.String()
+    refresh_token = graphene.String()
     member = graphene.Field(MemberType)
 
 class RegisterOutput(graphene.ObjectType):

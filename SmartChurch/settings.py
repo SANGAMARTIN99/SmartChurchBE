@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import datetime
 from decouple import config
 from pathlib import Path
 import os
@@ -42,7 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'graphene_django',
     'UserAuthentication',
-    'graphql_jwt.refresh_token.apps.RefreshTokenConfig',
+    'graphql_jwt',
     'corsheaders',
     ]
 
@@ -78,14 +79,39 @@ TEMPLATES = [
 
 GRAPHENE = {
     'SCHEMA': 'SmartChurch.main_schema.schema',
-    'MIDDLEWARE': [
-        'graphql_jwt.middleware.JSONWebTokenMiddleware',
-    ],
+    #'MIDDLEWARE': [  # Comment out to disable middleware-based auth; we'll handle manually
+    #    'graphql_jwt.middleware.JSONWebTokenMiddleware',
+    #],
+}
+
+AUTHENTICATION_BACKENDS = [
+    'graphql_jwt.backends.JSONWebTokenBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+JWT_AUTH = {
+    'JWT_SECRET_KEY': 'django-insecure-vo15blj-d4+=@ttc@mru#76qy3+=bf6-03*gl&hw+9iye((*@v',
+    'JWT_ALGORITHM': 'HS256',
+    'JWT_VERIFY_EXPIRATION': True,
+    'JWT_EXPIRATION_DELTA': datetime.timedelta(minutes=15),
+    'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),
 }
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     'http://127.0.0.1:5173',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
 ]
 
 AUTH_USER_MODEL = 'UserAuthentication.Member'
@@ -182,3 +208,19 @@ LANGUAGES = [
 LOCALE_PATHS = [
     os.path.join(BASE_DIR, 'locale'),
 ]
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'UserAuthentication': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+    },
+}
