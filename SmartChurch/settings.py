@@ -43,7 +43,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'graphene_django',
     'UserAuthentication',
+    'Pastor',
+    'churchMember',
     'graphql_jwt',
+    'graphql_jwt.refresh_token.apps.RefreshTokenConfig',
     'corsheaders',
     ]
 
@@ -58,6 +61,28 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.locale.LocaleMiddleware', 
 ]
+
+GRAPHENE = {
+    "SCHEMA": "SmartChurch.main_schema.schema",
+    'MIDDLEWARE': [
+        'graphql_jwt.middleware.JSONWebTokenMiddleware',
+        "churchMember.User_Auth_middleware.JWTAuthenticationMiddleware",
+    ],
+}
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": datetime.timedelta(minutes=60),   
+    "REFRESH_TOKEN_LIFETIME": datetime.timedelta(days=1),      
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
 
 ROOT_URLCONF = 'SmartChurch.urls'
 
@@ -76,13 +101,6 @@ TEMPLATES = [
         },
     },
 ]
-
-GRAPHENE = {
-    'SCHEMA': 'SmartChurch.main_schema.schema',
-    #'MIDDLEWARE': [  # Comment out to disable middleware-based auth; we'll handle manually
-    #    'graphql_jwt.middleware.JSONWebTokenMiddleware',
-    #],
-}
 
 AUTHENTICATION_BACKENDS = [
     'graphql_jwt.backends.JSONWebTokenBackend',
@@ -178,6 +196,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
