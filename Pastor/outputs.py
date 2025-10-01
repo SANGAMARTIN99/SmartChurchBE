@@ -79,3 +79,24 @@ class AnnouncementResponse(ObjectType):
     success = Boolean()
     message = String()
     announcement = Field(AnnouncementType)
+
+# New types for offerings data
+class OfferingRecord(ObjectType):
+    id = String()
+    date = String()
+    member_name = String()
+    street = String()
+    amount = Float()
+    offering_type = String()
+    mass_type = String()
+    attendant = String()
+
+class MassTypeStat(ObjectType):
+    type = String()
+    amount = Float()
+    percentage = Float()
+
+class OfferingTypeStat(ObjectType):
+    type = String()
+    amount = Float()
+    percentage = Float()

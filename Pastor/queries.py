@@ -4,10 +4,23 @@ from django.utils import timezone
 from asgiref.sync import sync_to_async
 from datetime import timedelta
 from django.db.models import Sum, Count
-from .outputs import DashboardStats, Member, Event, PrayerRequest, OfferingStats, Devotional, DevotionalAuthor, AnnouncementType
+from .outputs import (
+    DashboardStats,
+    Member,
+    Event,
+    PrayerRequest,
+    OfferingStats,
+    Devotional,
+    DevotionalAuthor,
+    AnnouncementType,
+    OfferingRecord,
+    MassTypeStat,
+    OfferingTypeStat,
+)
 from graphql import GraphQLError
 from churchMember.models import Member as MemberModel, Group, PrayerRequest as PrayerRequestModel, Offering, Event as EventModel, DailyDevotional, Announcement
 import logging
+from datetime import datetime
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -20,6 +33,9 @@ class PastorQuery(ObjectType):
     offering_stats = Field(OfferingStats)
     devotionals = List(Devotional, limit=Int(default_value=10), offset=Int(default_value=0))
     announcements = List(AnnouncementType)
+    recent_offerings = List(OfferingRecord, limit=Int(default_value=10))
+    offerings_by_mass = List(MassTypeStat, start=graphene.String(), end=graphene.String())
+    offerings_by_type = List(OfferingTypeStat, start=graphene.String(), end=graphene.String())
 
     def resolve_dashboard_stats(self, info):
         now = timezone.now()
@@ -114,6 +130,70 @@ class PastorQuery(ObjectType):
             trend=trend
         )
 
+    def resolve_recent_offerings(self, info, limit=10):
+        qs = Offering.objects.select_related('member', 'street', 'attendant').order_by('-date', '-created_at')[:limit]
+        records = []
+        for o in qs:
+            records.append(
+                OfferingRecord(
+                    id=str(o.id),
+                    date=o.date.strftime('%Y-%m-%d') if o.date else '',
+                    member_name=o.member.full_name if o.member else 'Anonymous',
+                    street=o.street.name if o.street else '',
+                    amount=float(o.amount or 0),
+                    offering_type=o.offering_type,
+                    mass_type=o.mass_type,
+                    attendant=o.attendant.full_name if o.attendant else ''
+                )
+            )
+        return records
+
+    def resolve_offerings_by_mass(self, info, start=None, end=None):
+        qs = Offering.objects.all()
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start).date()
+                qs = qs.filter(date__gte=start_dt)
+            except Exception:
+                pass
+        if end:
+            try:
+                end_dt = datetime.fromisoformat(end).date()
+                qs = qs.filter(date__lte=end_dt)
+            except Exception:
+                pass
+        total = qs.aggregate(total=Sum('amount'))['total'] or 0
+        agg = qs.values('mass_type').annotate(amount=Sum('amount')).order_by('-amount')
+        result = []
+        for row in agg:
+            amt = float(row['amount'] or 0)
+            perc = float((amt / total) * 100) if total else 0.0
+            result.append(MassTypeStat(type=row['mass_type'], amount=amt, percentage=perc))
+        return result
+
+    def resolve_offerings_by_type(self, info, start=None, end=None):
+        qs = Offering.objects.all()
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start).date()
+                qs = qs.filter(date__gte=start_dt)
+            except Exception:
+                pass
+        if end:
+            try:
+                end_dt = datetime.fromisoformat(end).date()
+                qs = qs.filter(date__lte=end_dt)
+            except Exception:
+                pass
+        total = qs.aggregate(total=Sum('amount'))['total'] or 0
+        agg = qs.values('offering_type').annotate(amount=Sum('amount')).order_by('-amount')
+        result = []
+        for row in agg:
+            amt = float(row['amount'] or 0)
+            perc = float((amt / total) * 100) if total else 0.0
+            result.append(OfferingTypeStat(type=row['offering_type'], amount=amt, percentage=perc))
+        return result
+
     def resolve_devotionals(self, info, limit=10, offset=0):
         return [
             Devotional(
@@ -131,6 +211,10 @@ class PastorQuery(ObjectType):
             )
             for devotional in DailyDevotional.objects.order_by('-published_at')[offset:offset+limit]
         ]
+    
+    def resolve_announcements(self, info):
+        # Return all announcements ordered by most recent first
+        return Announcement.objects.all().order_by('-created_at')
         
 
 
