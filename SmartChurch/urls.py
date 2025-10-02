@@ -21,8 +21,13 @@ from django.conf.urls.static import static
 from graphene_django.views import GraphQLView
 from SmartChurch.main_schema import schema
 from django.views.decorators.csrf import csrf_exempt
+from churchMember.views import upload_media
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("graphql/", csrf_exempt(GraphQLView.as_view(graphiql=True))),
+    path('api/upload/', upload_media, name='upload_media'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

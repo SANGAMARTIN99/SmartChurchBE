@@ -49,6 +49,9 @@ class Event(models.Model):
         return self.title
 
 
+
+
+
 class EventRSVP(models.Model):
     RSVP_STATUS = (
         ('CONFIRMED', 'Confirmed'),
@@ -86,6 +89,16 @@ class PrayerRequest(models.Model):
         return f"Prayer by {self.member.full_name}"
 
 
+class PrayerReply(models.Model):
+    prayer = models.ForeignKey(PrayerRequest, on_delete=models.CASCADE, related_name='replies')
+    responder = models.ForeignKey(Member, on_delete=models.SET_NULL, null=True)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Reply by {self.responder.full_name if self.responder else 'Pastoral Team'} on #{self.prayer_id}"
+
+
 class DailyDevotional(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField()
@@ -100,6 +113,21 @@ class DailyDevotional(models.Model):
 
     def __str__(self):
         return self.title
+    
+class DevotionalInteraction(models.Model):
+    member = models.ForeignKey(Member, on_delete=models.CASCADE)
+    devotional = models.ForeignKey(DailyDevotional, on_delete=models.CASCADE)
+    bookmarked = models.BooleanField(default=False)
+    amened = models.BooleanField(default=False)
+    journal = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('member', 'devotional')
+
+    def __str__(self):
+        return f"Interaction({self.member.full_name} -> {self.devotional.title})"
 
 
 class Announcement(models.Model):

@@ -29,6 +29,13 @@ class DevotionalInput(InputObjectType):
     audio_url = String()  # Optional audio URL
     video_url = String()  # Optional video URL 
 
+class PrayerReplyInput(InputObjectType):
+    prayer_id = Int(required=True)
+    message = String(required=True)
+
+class MarkPrayerInput(InputObjectType):
+    id = Int(required=True)
+
 class AnnouncementInput(graphene.InputObjectType):
     title = graphene.String(required=True)
     content = graphene.String(required=True)

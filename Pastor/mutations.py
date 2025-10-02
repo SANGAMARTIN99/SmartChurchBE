@@ -1,9 +1,9 @@
 import graphene
 from graphene import relay
 from graphene import ObjectType, Field, Boolean, String
-from .inputs import EventInput, PrayerRequestInput, UpdatePrayerRequestStatusInput, DevotionalInput , AnnouncementInput
-from .outputs import Event, PrayerRequest, Devotional, DevotionalAuthor , AnnouncementType , AnnouncementResponse
-from churchMember.models import Event as EventModel, PrayerRequest as PrayerRequestModel, Member as MemberModel, DailyDevotional , Announcement
+from .inputs import EventInput, PrayerRequestInput, UpdatePrayerRequestStatusInput, DevotionalInput , AnnouncementInput, PrayerReplyInput, MarkPrayerInput
+from .outputs import Event, PrayerRequest, Devotional, DevotionalAuthor , AnnouncementType , AnnouncementResponse, PrayerReply as PrayerReplyType
+from churchMember.models import Event as EventModel, PrayerRequest as PrayerRequestModel, Member as MemberModel, DailyDevotional , Announcement, DevotionalInteraction, PrayerReply
 from graphql import GraphQLError
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -70,8 +70,8 @@ class CreatePrayerRequest(graphene.Mutation):
 
     def mutate(self, info, input):
         user = info.context.user
-        if not user.is_authenticated or user.role != 'PASTOR':
-            raise Exception("Only pastors can create prayer requests")
+        if not user.is_authenticated :
+            raise Exception("User Is Not Authenticated")
 
         member = MemberModel.objects.get(id=input.member_id)
         prayer = PrayerRequestModel(
@@ -119,6 +119,95 @@ class UpdatePrayerRequestStatus(graphene.Mutation):
             )
         except PrayerRequestModel.DoesNotExist:
             raise Exception("Prayer request not found")
+
+
+def _serialize_prayer(prayer):
+    replies = [
+        PrayerReplyType(
+            responder=rep.responder.full_name if rep.responder else 'Pastoral Team',
+            message=rep.message,
+            date=rep.created_at.strftime("%Y-%m-%d")
+        )
+        for rep in PrayerReply.objects.filter(prayer=prayer).order_by('created_at')
+    ]
+    return PrayerRequest(
+        id=str(prayer.id),
+        member=prayer.member.full_name,
+        request=prayer.request,
+        date=prayer.created_at.strftime("%Y-%m-%d"),
+        status=prayer.status,
+        replies=replies,
+    )
+
+
+class CreatePrayerReply(graphene.Mutation):
+    prayer_request = Field(PrayerRequest)
+
+    class Arguments:
+        input = PrayerReplyInput(required=True)
+
+    def mutate(self, info, input):
+        user = info.context.user
+        if not user.is_authenticated or user.role not in ['PASTOR', 'ASSISTANT_PASTOR', 'EVANGELIST']:
+            raise Exception("Only pastoral staff can reply to prayers")
+
+        try:
+            prayer = PrayerRequestModel.objects.get(id=input.prayer_id)
+        except PrayerRequestModel.DoesNotExist:
+            raise Exception("Prayer request not found")
+
+        PrayerReply.objects.create(prayer=prayer, responder=user, message=input.message)
+        # Auto-mark as PRAYED if it was pending
+        if prayer.status == 'PENDING':
+            prayer.status = 'PRAYED'
+            prayer.save(update_fields=['status'])
+
+        return CreatePrayerReply(prayer_request=_serialize_prayer(prayer))
+
+
+class MarkPrayerAsPrayed(graphene.Mutation):
+    prayer_request = Field(PrayerRequest)
+
+    class Arguments:
+        input = MarkPrayerInput(required=True)
+
+    def mutate(self, info, input):
+        user = info.context.user
+        if not user.is_authenticated or user.role not in ['PASTOR', 'ASSISTANT_PASTOR', 'EVANGELIST']:
+            raise Exception("Only pastoral staff can update prayer status to PRAYED")
+        try:
+            prayer = PrayerRequestModel.objects.get(id=input.id)
+        except PrayerRequestModel.DoesNotExist:
+            raise Exception("Prayer request not found")
+        if prayer.status != 'PRAYED':
+            prayer.status = 'PRAYED'
+            prayer.updated_at = timezone.now()
+            prayer.save()
+        return MarkPrayerAsPrayed(prayer_request=_serialize_prayer(prayer))
+
+
+class MemberMarkPrayerAnswered(graphene.Mutation):
+    prayer_request = Field(PrayerRequest)
+
+    class Arguments:
+        input = MarkPrayerInput(required=True)
+
+    def mutate(self, info, input):
+        user = info.context.user
+        if not user.is_authenticated:
+            raise Exception("Authentication required")
+        try:
+            prayer = PrayerRequestModel.objects.get(id=input.id)
+        except PrayerRequestModel.DoesNotExist:
+            raise Exception("Prayer request not found")
+        # Only the owner can mark as answered
+        if prayer.member_id != user.id:
+            raise Exception("You can only mark your own prayer as answered")
+        if prayer.status != 'ANSWERED':
+            prayer.status = 'ANSWERED'
+            prayer.updated_at = timezone.now()
+            prayer.save()
+        return MemberMarkPrayerAnswered(prayer_request=_serialize_prayer(prayer))
 
 class CreateDevotional(graphene.Mutation):
     devotional = Field(Devotional)
@@ -207,6 +296,68 @@ class UpdateDevotional(graphene.Mutation):
         except DailyDevotional.DoesNotExist:
             raise Exception("Devotional not found")
 
+
+class ToggleBookmark(graphene.Mutation):
+    bookmarked = graphene.Boolean()
+
+    class Arguments:
+        devotional_id = graphene.String(required=True)
+
+    def mutate(self, info, devotional_id):
+        user = info.context.user
+        if not user or not user.is_authenticated:
+            raise GraphQLError("Authentication required")
+        try:
+            devotional = DailyDevotional.objects.get(id=devotional_id)
+        except DailyDevotional.DoesNotExist:
+            raise GraphQLError("Devotional not found")
+        interaction, _ = DevotionalInteraction.objects.get_or_create(member=user, devotional=devotional)
+        interaction.bookmarked = not interaction.bookmarked
+        interaction.save()
+        return ToggleBookmark(bookmarked=interaction.bookmarked)
+
+
+class ToggleAmen(graphene.Mutation):
+    amened = graphene.Boolean()
+    amen_count = graphene.Int()
+
+    class Arguments:
+        devotional_id = graphene.String(required=True)
+
+    def mutate(self, info, devotional_id):
+        user = info.context.user
+        if not user or not user.is_authenticated:
+            raise GraphQLError("Authentication required")
+        try:
+            devotional = DailyDevotional.objects.get(id=devotional_id)
+        except DailyDevotional.DoesNotExist:
+            raise GraphQLError("Devotional not found")
+        interaction, _ = DevotionalInteraction.objects.get_or_create(member=user, devotional=devotional)
+        interaction.amened = not interaction.amened
+        interaction.save()
+        count = DevotionalInteraction.objects.filter(devotional=devotional, amened=True).count()
+        return ToggleAmen(amened=interaction.amened, amen_count=count)
+
+
+class SaveJournal(graphene.Mutation):
+    journal = graphene.String()
+
+    class Arguments:
+        devotional_id = graphene.String(required=True)
+        text = graphene.String(required=True)
+
+    def mutate(self, info, devotional_id, text):
+        user = info.context.user
+        if not user or not user.is_authenticated:
+            raise GraphQLError("Authentication required")
+        try:
+            devotional = DailyDevotional.objects.get(id=devotional_id)
+        except DailyDevotional.DoesNotExist:
+            raise GraphQLError("Devotional not found")
+        interaction, _ = DevotionalInteraction.objects.get_or_create(member=user, devotional=devotional)
+        interaction.journal = text
+        interaction.save()
+        return SaveJournal(journal=interaction.journal)
 class DeleteDevotional(graphene.Mutation):
     success = Boolean()
 
@@ -306,3 +457,9 @@ class PastorMutation(ObjectType):
     create_announcement = CreateAnnouncement.Field()
     update_announcement = UpdateAnnouncement.Field()
     delete_announcement = DeleteAnnouncement.Field()
+    toggle_bookmark = ToggleBookmark.Field()
+    toggle_amen = ToggleAmen.Field()
+    save_journal = SaveJournal.Field()
+    create_prayer_reply = CreatePrayerReply.Field()
+    mark_prayer_as_prayed = MarkPrayerAsPrayed.Field()
+    member_mark_prayer_answered = MemberMarkPrayerAnswered.Field()

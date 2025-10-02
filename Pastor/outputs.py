@@ -33,12 +33,18 @@ class Event(ObjectType):
     location = String()
     description = String()
 
+class PrayerReply(ObjectType):
+    responder = String()
+    message = String()
+    date = String()
+
 class PrayerRequest(ObjectType):
     id = String()
     member = String()
     request = String()
     date = String()
     status = String()
+    replies = List(PrayerReply)
 
 class OfferingStats(ObjectType):
     this_week = Float()
@@ -60,6 +66,13 @@ class Devotional(ObjectType):
     image_url = String()
     audio_url = String()
     video_url = String()
+    amen_count = Int()
+
+
+class DevotionalInteraction(ObjectType):
+    bookmarked = Boolean()
+    amened = Boolean()
+    journal = String()
 
 class AnnouncementType(DjangoObjectType):
     class Meta:

@@ -9,16 +9,18 @@ from .outputs import (
     Member,
     Event,
     PrayerRequest,
+    PrayerReply as PrayerReplyType,
     OfferingStats,
     Devotional,
     DevotionalAuthor,
+    DevotionalInteraction as DevotionalInteractionType,
     AnnouncementType,
     OfferingRecord,
     MassTypeStat,
     OfferingTypeStat,
 )
 from graphql import GraphQLError
-from churchMember.models import Member as MemberModel, Group, PrayerRequest as PrayerRequestModel, Offering, Event as EventModel, DailyDevotional, Announcement
+from churchMember.models import Member as MemberModel, Group, PrayerRequest as PrayerRequestModel, Offering, Event as EventModel, DailyDevotional, Announcement, DevotionalInteraction, PrayerReply
 import logging
 from datetime import datetime
 
@@ -32,6 +34,7 @@ class PastorQuery(ObjectType):
     prayer_requests = List(PrayerRequest)
     offering_stats = Field(OfferingStats)
     devotionals = List(Devotional, limit=Int(default_value=10), offset=Int(default_value=0))
+    my_devotional_interaction = Field(DevotionalInteractionType, devotional_id=graphene.String(required=True))
     announcements = List(AnnouncementType)
     recent_offerings = List(OfferingRecord, limit=Int(default_value=10))
     offerings_by_mass = List(MassTypeStat, start=graphene.String(), end=graphene.String())
@@ -88,16 +91,28 @@ class PastorQuery(ObjectType):
         ]
 
     def resolve_prayer_requests(self, info):
-        return [
-            PrayerRequest(
-                id=str(prayer.id),
-                member=prayer.member.full_name,
-                request=prayer.request,
-                date=prayer.created_at.strftime("%Y-%m-%d"),
-                status=prayer.status
+        results = []
+        qs = PrayerRequestModel.objects.order_by('-created_at')[:10]
+        for prayer in qs:
+            replies = [
+                PrayerReplyType(
+                    responder=rep.responder.full_name if rep.responder else 'Pastoral Team',
+                    message=rep.message,
+                    date=rep.created_at.strftime("%Y-%m-%d")
+                )
+                for rep in PrayerReply.objects.filter(prayer=prayer).order_by('created_at')
+            ]
+            results.append(
+                PrayerRequest(
+                    id=str(prayer.id),
+                    member=prayer.member.full_name,
+                    request=prayer.request,
+                    date=prayer.created_at.strftime("%Y-%m-%d"),
+                    status=prayer.status,
+                    replies=replies,
+                )
             )
-            for prayer in PrayerRequestModel.objects.order_by('-created_at')[:10]
-        ]
+        return results
 
     def resolve_offering_stats(self, info):
         now = timezone.now()
@@ -195,22 +210,42 @@ class PastorQuery(ObjectType):
         return result
 
     def resolve_devotionals(self, info, limit=10, offset=0):
-        return [
-            Devotional(
-                id=str(devotional.id),
-                title=devotional.title,
-                content=devotional.content,
-                scripture=devotional.scripture or "",
-                published_at=devotional.published_at.strftime("%Y-%m-%d"),
-                author=DevotionalAuthor(
-                    full_name=devotional.author.full_name if devotional.author else "Anonymous"
-                ),
-                image_url=devotional.image_url or "",
-                audio_url=devotional.audio_url or "",
-                video_url=devotional.video_url or ""
+        results = []
+        qs = DailyDevotional.objects.order_by('-published_at')[offset:offset+limit]
+        for devotional in qs:
+            amen_count = DevotionalInteraction.objects.filter(devotional=devotional, amened=True).count()
+            results.append(
+                Devotional(
+                    id=str(devotional.id),
+                    title=devotional.title,
+                    content=devotional.content,
+                    scripture=devotional.scripture or "",
+                    published_at=devotional.published_at.strftime("%Y-%m-%d"),
+                    author=DevotionalAuthor(
+                        full_name=devotional.author.full_name if devotional.author else "Anonymous"
+                    ),
+                    image_url=devotional.image_url or "",
+                    audio_url=devotional.audio_url or "",
+                    video_url=devotional.video_url or "",
+                    amen_count=amen_count,
+                )
             )
-            for devotional in DailyDevotional.objects.order_by('-published_at')[offset:offset+limit]
-        ]
+        return results
+
+    def resolve_my_devotional_interaction(self, info, devotional_id):
+        user = info.context.user
+        if not user or not user.is_authenticated:
+            raise GraphQLError("Authentication required")
+        try:
+            devotional = DailyDevotional.objects.get(id=devotional_id)
+        except DailyDevotional.DoesNotExist:
+            raise GraphQLError("Devotional not found")
+        interaction, _ = DevotionalInteraction.objects.get_or_create(member=user, devotional=devotional)
+        return DevotionalInteractionType(
+            bookmarked=interaction.bookmarked,
+            amened=interaction.amened,
+            journal=interaction.journal or "",
+        )
     
     def resolve_announcements(self, info):
         # Return all announcements ordered by most recent first
