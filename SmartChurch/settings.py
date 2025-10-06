@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'UserAuthentication',
     'Pastor',
     'churchMember',
+    'ChurchSecreatary',
     'graphql_jwt',
     'graphql_jwt.refresh_token.apps.RefreshTokenConfig',
     'corsheaders',
