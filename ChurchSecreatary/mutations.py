@@ -3,9 +3,9 @@ from django.utils import timezone
 from datetime import datetime
 
 from UserAuthentication.models import Street, Member
-from .models import OfferingCard, CardAssignment, OfferingEntry
-from .outputs import CardAssignmentType, OfferingEntryType
-from .Inputs import CreateOfferingCardInput, AssignCardInput, UpdateAssignmentInput, OfferingEntryInput, BulkGenerateCardsInput
+from .models import OfferingCard, CardAssignment, OfferingEntry, CardApplication
+from .outputs import CardAssignmentType, OfferingEntryType, CardApplicationType
+from .Inputs import CreateOfferingCardInput, AssignCardInput, UpdateAssignmentInput, OfferingEntryInput, BulkGenerateCardsInput, CardApplicationInput
 
 
 class CreateOfferingCard(graphene.Mutation):
@@ -144,11 +144,54 @@ class RecordOfferingEntry(graphene.Mutation):
         ))
 
 
+class CreateCardApplication(graphene.Mutation):
+    class Arguments:
+        input = CardApplicationInput(required=True)
+
+    ok = graphene.Boolean()
+    application = graphene.Field(CardApplicationType)
+
+    def mutate(self, info, input: CardApplicationInput):
+        street = Street.objects.filter(id=input.street_id).first()
+        if not street:
+            raise Exception("Street not found")
+
+        # Try to link to authenticated member if possible
+        member = None
+        user = getattr(info.context, 'user', None)
+        if user and getattr(user, 'is_authenticated', False):
+            try:
+                member = Member.objects.filter(email=user.email).first()
+            except Exception:
+                member = None
+
+        app = CardApplication.objects.create(
+            member=member,
+            full_name=input.full_name,
+            phone_number=input.phone_number,
+            street=street,
+            preferred_number=getattr(input, 'preferred_number', None),
+            note=getattr(input, 'note', '') or '',
+        )
+
+        return CreateCardApplication(ok=True, application=CardApplicationType(
+            id=str(app.id),
+            full_name=app.full_name,
+            phone_number=app.phone_number,
+            street=app.street.name,
+            preferred_number=app.preferred_number or None,
+            note=app.note,
+            status=app.status,
+            created_at=app.created_at.strftime('%Y-%m-%d %H:%M'),
+        ))
+
+
 class SecretaryMutation(graphene.ObjectType):
     create_offering_card = CreateOfferingCard.Field()
     assign_card = AssignCard.Field()
     update_assignment = UpdateAssignment.Field()
     record_offering_entry = RecordOfferingEntry.Field()
+    create_card_application = CreateCardApplication.Field()
 
 
 class BulkGenerateCards(graphene.Mutation):

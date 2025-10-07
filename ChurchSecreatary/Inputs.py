@@ -39,3 +39,10 @@ class BulkGenerateCardsInput(graphene.InputObjectType):
     start_number = graphene.Int(default_value=1)
     end_number = graphene.Int(default_value=200)
 
+
+class CardApplicationInput(graphene.InputObjectType):
+    full_name = graphene.String(required=True)
+    phone_number = graphene.String(required=True)
+    street_id = graphene.Int(required=True)
+    preferred_number = graphene.Int()
+    note = graphene.String()

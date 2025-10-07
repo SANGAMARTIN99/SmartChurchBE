@@ -129,6 +129,26 @@ class CardAssignment(models.Model):
         return f"{self.card.code} -> {self.full_name} ({self.year})"
 
 
+class CardApplication(models.Model):
+    class Status(models.TextChoices):
+        NEW = "NEW", "new"
+        APPROVED = "APPROVED", "approved"
+        REJECTED = "REJECTED", "rejected"
+
+    member = models.ForeignKey(Member, null=True, blank=True, on_delete=models.SET_NULL, related_name="card_applications")
+    full_name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=20)
+    street = models.ForeignKey(Street, on_delete=models.CASCADE, related_name="card_applications")
+    preferred_number = models.PositiveIntegerField(null=True, blank=True)
+    note = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.full_name} - {self.street.name} ({self.preferred_number or 'any'})"
+
+
 class OfferingEntry(models.Model):
     class Type(models.TextChoices):
         AHADI = "AHADI", "Ahadi"

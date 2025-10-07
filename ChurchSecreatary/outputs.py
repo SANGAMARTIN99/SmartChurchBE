@@ -92,3 +92,14 @@ class CardsOverviewType(graphene.ObjectType):
     total_collected_shukrani = graphene.Float()
     total_collected_majengo = graphene.Float()
 
+
+class CardApplicationType(graphene.ObjectType):
+    id = graphene.ID()
+    full_name = graphene.String()
+    phone_number = graphene.String()
+    street = graphene.String()
+    preferred_number = graphene.Int()
+    note = graphene.String()
+    status = graphene.String()
+    created_at = graphene.String()
+
