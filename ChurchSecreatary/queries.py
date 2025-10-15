@@ -4,7 +4,8 @@ from django.utils import timezone
 from datetime import timedelta
 
 from django.db.models import Sum, Count
-from .models import SecretaryTask, MemberRequest as MemberRequestModel, ActivityLog, OfferingCard, CardAssignment, OfferingEntry
+from .models import SecretaryTask, MemberRequest as MemberRequestModel, ActivityLog, OfferingCard, CardAssignment, OfferingEntry, RegistrationWindow
+from django.db.models import Q
 from .outputs import (
     SecretaryTaskType,
     MemberRequestType,
@@ -13,6 +14,12 @@ from .outputs import (
     OfferingCardType,
     AvailableCardNumberType,
     CardsOverviewType,
+    RegistrationWindowStatusType,
+    NumberSuggestionResultType,
+    MemberOfferingHistoryType,
+    OfferingEntryItemType,
+    CardApplicationType,
+    MyCardStateType,
 )
 
 
@@ -24,6 +31,11 @@ class SecretaryQuery(ObjectType):
     offering_cards = List(OfferingCardType, street_id=Int(), is_taken=graphene.Boolean(), search=String())
     available_card_numbers = List(AvailableCardNumberType, street_id=Int())
     cards_overview = graphene.Field(CardsOverviewType, street_id=Int())
+    registration_window_status = graphene.Field(RegistrationWindowStatusType)
+    number_suggestions = graphene.Field(NumberSuggestionResultType, street_id=Int(required=True), query_number=Int(required=True), limit=Int(default_value=5))
+    member_offering_history = graphene.Field(MemberOfferingHistoryType, member_id=Int(required=True), year=Int())
+    card_applications = List(CardApplicationType, status=String())
+    my_card_state = graphene.Field(MyCardStateType)
 
     def resolve_secretary_tasks(self, info, time_filter="week"):
         qs = SecretaryTask.objects.all().order_by('due_date')
@@ -41,12 +53,122 @@ class SecretaryQuery(ObjectType):
                 SecretaryTaskType(
                     id=str(t.id),
                     title=t.title,
-                    description=t.description or "",
-                    priority=t.Priority(t.priority).label,
                     status=t.Status(t.status).label,
                     due_date=t.due_date.strftime('%Y-%m-%d') if t.due_date else "",
                     assigned_to=(t.assigned_to.full_name if getattr(t.assigned_to, 'full_name', None) else (t.assigned_to.get_username() if t.assigned_to else "")),
                     category=t.Category(t.category).label,
+                )
+            )
+        return results
+
+    def resolve_my_card_state(self, info):
+        from .models import Member as MemberModel, CardApplication
+        user = getattr(info.context, 'user', None)
+        member = None
+        if user and getattr(user, 'is_authenticated', False):
+            member = getattr(user, 'member', None) or MemberModel.objects.filter(user=user).first()
+        if not member:
+            return MyCardStateType(has_pending_application=False, has_current_assignment=False)
+        # pending application
+        has_pending = CardApplication.objects.filter(member=member, status=CardApplication.Status.NEW).exists()
+        # current year assignment
+        current_year = timezone.now().year
+        has_current = CardAssignment.objects.filter(member=member, year=current_year, active=True).exists()
+        return MyCardStateType(has_pending_application=has_pending, has_current_assignment=has_current)
+
+    def resolve_member_offering_history(self, info, member_id, year=None):
+        # Find cards assigned to the member (any year)
+        card_ids = list(CardAssignment.objects.filter(member_id=member_id).values_list('card_id', flat=True).distinct())
+        ent_qs = OfferingEntry.objects.filter(card_id__in=card_ids)
+        if year:
+            ent_qs = ent_qs.filter(date__year=year)
+        items = []
+        total_ahadi = 0.0
+        total_shukrani = 0.0
+        total_majengo = 0.0
+        for e in ent_qs.select_related('card').order_by('-date'):
+            amt = float(e.amount)
+            if e.entry_type == 'AHADI':
+                total_ahadi += amt
+            elif e.entry_type == 'SHUKRANI':
+                total_shukrani += amt
+            elif e.entry_type == 'MAJENGO':
+                total_majengo += amt
+            items.append(OfferingEntryItemType(
+                code=e.card.code,
+                date=e.date.strftime('%Y-%m-%d'),
+                entry_type=e.entry_type,
+                amount=amt,
+            ))
+        return MemberOfferingHistoryType(
+            member_id=str(member_id),
+            year=year or None,
+            entries=items,
+            total_ahadi=total_ahadi,
+            total_shukrani=total_shukrani,
+            total_majengo=total_majengo,
+        )
+
+    def resolve_registration_window_status(self, info):
+        is_open, start, end = RegistrationWindow.current_status()
+        return RegistrationWindowStatusType(
+            is_open=is_open,
+            start_at=(start.isoformat(timespec='seconds') if start else None),
+            end_at=(end.isoformat(timespec='seconds') if end else None),
+        )
+
+    def resolve_number_suggestions(self, info, street_id, query_number, limit=5):
+        # Determine exact availability
+        exact_card = OfferingCard.objects.filter(street_id=street_id, number=query_number).first()
+        exact_available = False
+        exact_code = None
+        if exact_card and not exact_card.is_taken:
+            exact_available = True
+            exact_code = exact_card.code
+
+        # find nearby suggestions around query_number within +/- 10 range
+        window = 10
+        qs = (
+            OfferingCard.objects.filter(street_id=street_id, is_taken=False, number__gte=max(1, query_number - window), number__lte=query_number + window)
+            .exclude(number=query_number)
+            .order_by('number')[:limit]
+        )
+        suggestions = [
+            AvailableCardNumberType(street=c.street.name, number=c.number, code=c.code)
+            for c in qs
+        ]
+        # If no exact card exists at all and within reasonable range, also propose the closest existing free numbers irrespective of window
+        return NumberSuggestionResultType(
+            street=OfferingCard.objects.filter(street_id=street_id).values_list('street__name', flat=True).first() or '',
+            query_number=query_number,
+            exact_available=exact_available,
+            exact_code=exact_code or '',
+            suggestions=suggestions,
+        )
+
+    def resolve_card_applications(self, info, status=None):
+        from .models import CardApplication
+        qs = CardApplication.objects.select_related('street', 'member').order_by('-created_at')
+        if status:
+            status_key = status.upper()
+            valid = {"NEW", "APPROVED", "REJECTED"}
+            if status_key in valid:
+                qs = qs.filter(status=status_key)
+        results = []
+        for app in qs:
+            results.append(
+                CardApplicationType(
+                    id=str(app.id),
+                    full_name=app.full_name,
+                    phone_number=app.phone_number,
+                    street=app.street.name,
+                    preferred_number=app.preferred_number or None,
+                    note=app.note,
+                    pledged_ahadi=float(app.pledged_ahadi or 0),
+                    pledged_shukrani=float(app.pledged_shukrani or 0),
+                    pledged_majengo=float(app.pledged_majengo or 0),
+                    status=app.status,
+                    created_at=app.created_at.strftime('%Y-%m-%d %H:%M'),
                 )
             )
         return results
@@ -112,10 +234,28 @@ class SecretaryQuery(ObjectType):
         if is_taken is not None:
             qs = qs.filter(is_taken=is_taken)
         if search:
-            qs = qs.filter(code__icontains=search)
+            # Search across code, current/latest assignment full_name and phone_number
+            # Build a subquery of assignment ids by card prioritizing current year active, else latest year
+            # Simpler approach: filter via OR on code and assignments relation
+            qs = qs.filter(
+                Q(code__icontains=search)
+                | Q(assignments__full_name__icontains=search)
+                | Q(assignments__phone_number__icontains=search)
+            ).distinct()
 
-        # Preload assignments
-        assignments = {a.card_id: a for a in CardAssignment.objects.filter(card_id__in=qs.values_list('id', flat=True))}
+        # Preload assignments; prefer current year active assignment, else latest by year
+        current_year = timezone.now().year
+        assignments_qs = CardAssignment.objects.filter(card_id__in=qs.values_list('id', flat=True)).order_by('-year')
+        assignments = {}
+        for a in assignments_qs:
+            cid = a.card_id
+            chosen = assignments.get(cid)
+            if not chosen:
+                # first seen (highest year due to ordering)
+                assignments[cid] = a
+            # prefer current year active
+            if a.year == current_year and a.active:
+                assignments[cid] = a
         # Precompute sums
         sums = (
             OfferingEntry.objects.filter(card_id__in=qs.values_list('id', flat=True))
@@ -146,6 +286,8 @@ class SecretaryQuery(ObjectType):
                     assigned_to_name=(c.assigned_to.full_name if getattr(c.assigned_to, 'full_name', None) else ''),
                     assigned_to_id=(str(c.assigned_to.id) if c.assigned_to else ''),
                     assignment_id=(str(a.id) if a else ''),
+                    assigned_phone=(a.phone_number if a else ''),
+                    assigned_year=(a.year if a else 0),
                     pledged_ahadi=pledged_ahadi,
                     pledged_shukrani=pledged_shukrani,
                     pledged_majengo=pledged_majengo,

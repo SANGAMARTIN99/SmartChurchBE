@@ -113,7 +113,7 @@ class OfferingCard(models.Model):
 
 
 class CardAssignment(models.Model):
-    card = models.OneToOneField(OfferingCard, on_delete=models.CASCADE, related_name="assignment")
+    card = models.ForeignKey(OfferingCard, on_delete=models.CASCADE, related_name="assignments")
     member = models.ForeignKey(Member, null=True, blank=True, on_delete=models.SET_NULL, related_name="offering_card_assignments")
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20)
@@ -128,6 +128,9 @@ class CardAssignment(models.Model):
     def __str__(self):
         return f"{self.card.code} -> {self.full_name} ({self.year})"
 
+    class Meta:
+        unique_together = ("card", "year")
+
 
 class CardApplication(models.Model):
     class Status(models.TextChoices):
@@ -141,12 +144,41 @@ class CardApplication(models.Model):
     street = models.ForeignKey(Street, on_delete=models.CASCADE, related_name="card_applications")
     preferred_number = models.PositiveIntegerField(null=True, blank=True)
     note = models.TextField(blank=True)
+    pledged_ahadi = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    pledged_shukrani = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    pledged_majengo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    assignment = models.ForeignKey('CardAssignment', null=True, blank=True, on_delete=models.SET_NULL, related_name='applications')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.full_name} - {self.street.name} ({self.preferred_number or 'any'})"
+
+
+class OfferingBatch(models.Model):
+    """Persistent batch metadata for Sunday offerings entry.
+    Stores audit info in addition to ActivityLog entries.
+    Mass type values should align with churchMember.Offering.MASS_TYPES.
+    For 'MAJOR', specify first or second mass using major_mass_number (1 or 2).
+    """
+    MASS_TYPES = (
+        ("MAJOR", "Major"),
+        ("MORNING_GLORY", "Morning Glory"),
+        ("EVENING_GLORY", "Evening Glory"),
+        ("SELI", "SELI"),
+    )
+
+    street = models.ForeignKey(Street, on_delete=models.CASCADE, related_name="offering_batches")
+    recorder_name = models.CharField(max_length=255)
+    date = models.DateField(default=timezone.now)
+    mass_type = models.CharField(max_length=50, choices=MASS_TYPES)
+    major_mass_number = models.PositiveSmallIntegerField(null=True, blank=True)  # 1 or 2 when mass_type == 'MAJOR'
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        mm = f" #{self.major_mass_number}" if (self.mass_type == "MAJOR" and self.major_mass_number) else ""
+        return f"Batch {self.date} {self.mass_type}{mm} - {self.street.name} by {self.recorder_name}"
 
 
 class OfferingEntry(models.Model):
@@ -159,7 +191,30 @@ class OfferingEntry(models.Model):
     entry_type = models.CharField(max_length=16, choices=Type.choices)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     date = models.DateField(default=timezone.now)
+    batch = models.ForeignKey('OfferingBatch', null=True, blank=True, on_delete=models.SET_NULL, related_name='entries')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.card.code} {self.entry_type} {self.amount} on {self.date}"
+
+
+class RegistrationWindow(models.Model):
+    """Represents a window during which members can auto-request cards.
+    Only one active window is expected at a time; latest created takes precedence.
+    """
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField()
+    is_open = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Window {self.start_at} → {self.end_at} ({'open' if self.is_open else 'closed'})"
+
+    @classmethod
+    def current_status(cls):
+        now = timezone.now()
+        w = cls.objects.filter(is_open=True, end_at__gte=now).order_by('-created_at').first()
+        if not w:
+            return False, None, None
+        return w.start_at <= now <= w.end_at, w.start_at, w.end_at

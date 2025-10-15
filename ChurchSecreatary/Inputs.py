@@ -46,3 +46,27 @@ class CardApplicationInput(graphene.InputObjectType):
     street_id = graphene.Int(required=True)
     preferred_number = graphene.Int()
     note = graphene.String()
+    pledged_ahadi = graphene.Float()
+    pledged_shukrani = graphene.Float()
+    pledged_majengo = graphene.Float()
+
+
+# Bulk offering entry inputs
+class OfferingBatchMetaInput(graphene.InputObjectType):
+    street_id = graphene.Int(required=True)
+    recorder_name = graphene.String(required=True)
+    date = graphene.String(required=True)  # YYYY-MM-DD
+    mass_type = graphene.String(required=True)  # MAJOR | MORNING_GLORY | EVENING_GLORY | SELI
+    major_mass_number = graphene.Int()  # 1 or 2 when mass_type == 'MAJOR'
+
+
+class BulkOfferingEntryItemInput(graphene.InputObjectType):
+    card_id = graphene.ID(required=True)
+    entry_type = graphene.String(required=True)
+    amount = graphene.Float(required=True)
+    date = graphene.String()  # optional per-entry override
+
+
+class BulkOfferingEntryInput(graphene.InputObjectType):
+    meta = graphene.Argument(OfferingBatchMetaInput, required=True)
+    entries = graphene.List(BulkOfferingEntryItemInput, required=True)
