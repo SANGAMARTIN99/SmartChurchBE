@@ -6,6 +6,7 @@ from UserAuthentication.models import Street, Member
 from .models import OfferingCard, CardAssignment, OfferingEntry, CardApplication, RegistrationWindow, OfferingBatch, ActivityLog
 from .outputs import CardAssignmentType, OfferingEntryType, CardApplicationType, RegistrationWindowStatusType, BulkOfferingResultType, OfferingBatchType
 from .Inputs import CreateOfferingCardInput, AssignCardInput, UpdateAssignmentInput, OfferingEntryInput, BulkGenerateCardsInput, CardApplicationInput, BulkOfferingEntryInput
+from churchMember.models import Offering as CMOffering
 
 
 class CreateOfferingCard(graphene.Mutation):
@@ -144,6 +145,28 @@ class RecordOfferingEntry(graphene.Mutation):
             amount=input.amount,
             date=dt or timezone.now().date(),
         )
+        # Best-effort sync to churchMember.Offering so dashboards remain consistent
+        try:
+            ent_date = entry.date
+            # Prefer active assignment for the entry year
+            assign = (
+                CardAssignment.objects
+                .filter(card=card, year=getattr(ent_date, 'year', timezone.now().year))
+                .order_by('-active')
+                .first()
+            )
+            cm_member = assign.member if assign else None
+            CMOffering.objects.create(
+                member=cm_member,
+                amount=entry.amount,
+                offering_type=entry.entry_type,
+                mass_type='MAJOR',  # single-entry API lacks mass context
+                street=card.street,
+                date=entry.date,
+                attendant=None,
+            )
+        except Exception:
+            pass
         return RecordOfferingEntry(ok=True, entry=OfferingEntryType(
             id=str(entry.id),
             card_code=card.code,
@@ -539,6 +562,26 @@ class BulkRecordOfferingEntries(graphene.Mutation):
                 date=ent_date,
                 batch=batch,
             )
+            # Best-effort sync to churchMember.Offering with batch mass context
+            try:
+                assign = (
+                    CardAssignment.objects
+                    .filter(card=card, year=getattr(ent_date, 'year', timezone.now().year))
+                    .order_by('-active')
+                    .first()
+                )
+                cm_member = assign.member if assign else None
+                CMOffering.objects.create(
+                    member=cm_member,
+                    amount=entry.amount,
+                    offering_type=entry.entry_type,
+                    mass_type=batch.mass_type,
+                    street=card.street,
+                    date=entry.date,
+                    attendant=None,
+                )
+            except Exception:
+                pass
             amt = float(entry.amount)
             et = entry.entry_type
             if et == 'AHADI':

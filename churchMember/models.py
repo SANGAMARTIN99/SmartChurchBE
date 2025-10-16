@@ -14,6 +14,10 @@ class Offering(models.Model):
         ('TITHE', 'Tithe'),
         ('SPECIAL_OFFERING', 'Special Offering'),
         ('GENERAL_CONTRIBUTION', 'General Contribution'),
+        # Extended to align with Secretary entries
+        ('AHADI', 'Ahadi'),
+        ('SHUKRANI', 'Shukrani'),
+        ('MAJENGO', 'Majengo'),
     )
     MASS_TYPES = (
         ('MAJOR', 'Major'),

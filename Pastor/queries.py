@@ -178,11 +178,12 @@ class PastorQuery(ObjectType):
             except Exception:
                 pass
         total = qs.aggregate(total=Sum('amount'))['total'] or 0
+        total_f = float(total) if total else 0.0
         agg = qs.values('mass_type').annotate(amount=Sum('amount')).order_by('-amount')
         result = []
         for row in agg:
             amt = float(row['amount'] or 0)
-            perc = float((amt / total) * 100) if total else 0.0
+            perc = ((amt / total_f) * 100) if total_f else 0.0
             result.append(MassTypeStat(type=row['mass_type'], amount=amt, percentage=perc))
         return result
 
@@ -201,11 +202,12 @@ class PastorQuery(ObjectType):
             except Exception:
                 pass
         total = qs.aggregate(total=Sum('amount'))['total'] or 0
+        total_f = float(total) if total else 0.0
         agg = qs.values('offering_type').annotate(amount=Sum('amount')).order_by('-amount')
         result = []
         for row in agg:
             amt = float(row['amount'] or 0)
-            perc = float((amt / total) * 100) if total else 0.0
+            perc = ((amt / total_f) * 100) if total_f else 0.0
             result.append(OfferingTypeStat(type=row['offering_type'], amount=amt, percentage=perc))
         return result
 
