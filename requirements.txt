@@ -2,18 +2,23 @@
 Django>=5.1.5,<6.0.0
 django-cors-headers>=4.3.0,<5.0.0
 django-filter>=23.3,<24.0
-django-graphql-jwt==0.3.0
-django-graphql-auth==0.3.16
-graphene-django>=3.1.5,<4.0.0
-graphene>=3.2.0,<4.0.0
-graphql-core>=3.2.0,<4.0.0
-psycopg2-binary>=2.9.9,<3.0.0
-python-decouple>=3.8,<4.0
+
+# GraphQL stack (Graphene 3 compatible)
+graphene-django==3.2.3
+graphene==3.3
+graphql-core==3.2.3
+django-graphql-jwt
+django-graphql-auth
+
+# REST and utilities
 djangorestframework>=3.14.0,<4.0.0
 djangorestframework-simplejwt>=5.2.2,<6.0.0
+psycopg2-binary>=2.9.9,<3.0.0
+python-decouple>=3.8,<4.0
 python-jose>=3.3.0,<4.0.0
 PyJWT>=2.8.0,<3.0.0
 asgiref>=3.7.2,<4.0.0
 sqlparse>=0.4.4,<0.5.0
 setuptools==70.0.0
 wheel==0.44.0
+gunicorn

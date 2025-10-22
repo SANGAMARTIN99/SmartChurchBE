@@ -28,7 +28,7 @@ SECRET_KEY = 'django-insecure-vo15blj-d4+=@ttc@mru#76qy3+=bf6-03*gl&hw+9iye((*@v
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['smartchurchbe.onrender.com','*']
 CORS_ALLOW_CREDENTIALS = True
 
 
