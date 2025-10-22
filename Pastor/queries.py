@@ -18,6 +18,7 @@ from .outputs import (
     OfferingRecord,
     MassTypeStat,
     OfferingTypeStat,
+    StreetStat,
 )
 from graphql import GraphQLError
 from churchMember.models import Member as MemberModel, Group, PrayerRequest as PrayerRequestModel, Offering, Event as EventModel, DailyDevotional, Announcement, DevotionalInteraction, PrayerReply
@@ -39,6 +40,7 @@ class PastorQuery(ObjectType):
     recent_offerings = List(OfferingRecord, limit=Int(default_value=10))
     offerings_by_mass = List(MassTypeStat, start=graphene.String(), end=graphene.String())
     offerings_by_type = List(OfferingTypeStat, start=graphene.String(), end=graphene.String())
+    offerings_by_street = List(StreetStat, start=graphene.String(), end=graphene.String())
 
     def resolve_dashboard_stats(self, info):
         now = timezone.now()
@@ -209,6 +211,45 @@ class PastorQuery(ObjectType):
             amt = float(row['amount'] or 0)
             perc = ((amt / total_f) * 100) if total_f else 0.0
             result.append(OfferingTypeStat(type=row['offering_type'], amount=amt, percentage=perc))
+        return result
+
+    def resolve_offerings_by_street(self, info, start=None, end=None):
+        qs = Offering.objects.select_related('street').all()
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start).date()
+                qs = qs.filter(date__gte=start_dt)
+            except Exception:
+                pass
+        if end:
+            try:
+                end_dt = datetime.fromisoformat(end).date()
+                qs = qs.filter(date__lte=end_dt)
+            except Exception:
+                pass
+        # Aggregate totals by street
+        agg = (
+            qs.values('street_id', 'street__name')
+              .annotate(amount=Sum('amount'))
+              .order_by('-amount')
+        )
+        # Member counts per street (single query)
+        from UserAuthentication.models import Member as UMember
+        street_ids = [row['street_id'] for row in agg if row['street_id']]
+        counts = dict(UMember.objects.filter(street_id__in=street_ids)
+                      .values('street_id')
+                      .annotate(cnt=Count('id'))
+                      .values_list('street_id', 'cnt')) if street_ids else {}
+
+        result = []
+        for row in agg:
+            name = row['street__name'] or ''
+            total_amt = float(row['amount'] or 0)
+            member_count = int(counts.get(row['street_id'], 0))
+            avg = (total_amt / member_count) if member_count else 0.0
+            # Trend placeholder; can be computed vs previous period if needed
+            trend = 'up'
+            result.append(StreetStat(name=name, total=total_amt, member_count=member_count, average=avg, trend=trend))
         return result
 
     def resolve_devotionals(self, info, limit=10, offset=0):

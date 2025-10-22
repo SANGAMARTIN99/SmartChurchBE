@@ -113,3 +113,11 @@ class OfferingTypeStat(ObjectType):
     type = String()
     amount = Float()
     percentage = Float()
+
+# Street-wise aggregation
+class StreetStat(ObjectType):
+    name = String()
+    total = Float()
+    member_count = Int()
+    average = Float()
+    trend = String()
