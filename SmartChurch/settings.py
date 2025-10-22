@@ -29,7 +29,31 @@ SECRET_KEY = 'django-insecure-vo15blj-d4+=@ttc@mru#76qy3+=bf6-03*gl&hw+9iye((*@v
 DEBUG = True
 
 ALLOWED_HOSTS = ['smartchurchbe.onrender.com','*']
+# CORS Settings
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    'https://68f9507ec44019af70178a2e--dapper-cannoli-407389.netlify.app',
+    'http://localhost:3000',  # For local development
+]
+CORS_ALLOW_METHODS = [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+]
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 
 # Application definition
