@@ -7,8 +7,8 @@ django-filter>=23.3,<24.0
 graphene-django==3.2.3
 graphene==3.3
 graphql-core==3.2.3
-django-graphql-jwt==0.4.0
-django-graphql-auth==0.3.16
+django-graphql-jwt
+django-graphql-auth
 
 # REST and utilities
 djangorestframework>=3.14.0,<4.0.0
