@@ -122,8 +122,12 @@ JWT_AUTH = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     'http://127.0.0.1:5173',
-    'https://smartchurchbe.onrender.com',
-    'https://dapper-cannoli-407389.netlify.app',
+    "https://smartchurchfe.onrender.com",   # ✅ your new frontend on Render
+    "https://smartchurchbe.onrender.com",   # optional self-allow
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://smartchurchfe.onrender.com",
 ]
 
 CORS_ALLOW_HEADERS = [
